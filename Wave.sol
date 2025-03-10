@@ -1,24 +1,45 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IMinterManager} from "./interfaces/IMinterManager.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ILockable} from "./interfaces/ILockable.sol";
-import {ERC721Burnable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ERC721BurnableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721BurnableUpgradeable.sol";
+import {ERC2771ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/metatx/ERC2771ContextUpgradeable.sol";
+import {ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 
-contract Wave is ERC721, Ownable, IMinterManager, Pausable, ILockable, ERC721Burnable, ReentrancyGuard {
+contract Wave is
+    ERC721Upgradeable,
+    OwnableUpgradeable,
+    IMinterManager,
+    PausableUpgradeable,
+    ILockable,
+    ERC721BurnableUpgradeable,
+    ERC2771ContextUpgradeable
+{
     mapping(address => bool) private _minters;
     mapping(uint256 => bool) private _lockedTokens;
     mapping(uint256 => uint256) private _lockTime;
 
-    constructor() ERC721("Wave", "WV") Ownable(_msgSender()) {}
-
     modifier onlyMinter() {
         require(_minters[_msgSender()], "Not minter");
         _;
+    }
+
+    // {trustedForwarder} is initialized as a immutable variable of Wave, which locates at the code segment
+    // so the proxy can access the {trustedForwarder} without accessing its storage
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor(address trustedForwarder) ERC2771ContextUpgradeable(trustedForwarder){ 
+        _disableInitializers();
+    }
+
+    function initialize() public initializer {
+        __ERC721_init("Wave", "WV");
+        __Ownable_init( _msgSender());
+        __Pausable_init();
+        __ERC721Burnable_init();
     }
 
     function mint(address to, uint256 tokenId) public whenNotPaused onlyMinter {
@@ -29,7 +50,7 @@ contract Wave is ERC721, Ownable, IMinterManager, Pausable, ILockable, ERC721Bur
         return _minters[account];
     }
 
-    function addMinter(address account) external override whenNotPaused onlyOwner{
+    function addMinter(address account) external override whenNotPaused onlyOwner {
         _minters[account] = true;
     }
 
@@ -45,10 +66,14 @@ contract Wave is ERC721, Ownable, IMinterManager, Pausable, ILockable, ERC721Bur
         _unpause();
     }
 
-    function lockTokens(uint256[] calldata tokenIds, uint256 lockTime)external override whenNotPaused{
+    function lockTokens(uint256[] calldata tokenIds, uint256 lockTime)
+        external
+        override
+        whenNotPaused
+    {
         require(lockTime > 0, "Lock time must be greater than 0");
 
-        // change isMinter to public  
+        // change isMinter to public
         if (isMinter(_msgSender())) {
             for (uint256 i = 0; i < tokenIds.length; i++) {
                 _requireOwned(tokenIds[i]);
@@ -67,7 +92,7 @@ contract Wave is ERC721, Ownable, IMinterManager, Pausable, ILockable, ERC721Bur
         }
     }
 
-    function unlockTokens(uint256[] calldata tokenIds)external override whenNotPaused{
+    function unlockTokens(uint256[] calldata tokenIds) external override whenNotPaused {
         if (isMinter(_msgSender())) {
             for (uint256 i = 0; i < tokenIds.length; i++) {
                 _requireOwned(tokenIds[i]);
@@ -86,13 +111,48 @@ contract Wave is ERC721, Ownable, IMinterManager, Pausable, ILockable, ERC721Bur
         }
     }
 
-    function isTokenLocked(uint256 tokenId) public view  override returns (bool) {
+    function isTokenLocked(uint256 tokenId)
+        public
+        view
+        override
+        returns (bool)
+    {
         _requireOwned(tokenId);
         return _lockedTokens[tokenId];
     }
 
-    function burn(uint256 tokenId) public  override whenNotPaused {
-        require(ownerOf(tokenId) == _msgSender(),"Not owner");
+    function burn(uint256 tokenId) public override {
+        require(ownerOf(tokenId) == msg.sender, "Not owner");
         super.burn(tokenId);
+    }
+
+    function _msgSender()
+        internal
+        view
+        virtual
+        override(ERC2771ContextUpgradeable, ContextUpgradeable)
+        returns (address sender)
+    {
+        return super._msgSender();
+    }
+
+    function _msgData()
+        internal
+        view
+        virtual
+        override(ERC2771ContextUpgradeable, ContextUpgradeable)
+        returns (bytes calldata)
+    {
+        return super._msgData();
+    }
+
+    function _contextSuffixLength()
+        internal
+        view
+        virtual
+        override(ERC2771ContextUpgradeable, ContextUpgradeable)
+        returns (uint256)
+    {
+        return super._contextSuffixLength();
     }
 }
