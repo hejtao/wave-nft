@@ -9,6 +9,7 @@ import {ILockable} from "./interfaces/ILockable.sol";
 import {ERC721BurnableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721BurnableUpgradeable.sol";
 import {ERC2771ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/metatx/ERC2771ContextUpgradeable.sol";
 import {ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 contract Wave is
     ERC721Upgradeable,
@@ -17,11 +18,13 @@ contract Wave is
     PausableUpgradeable,
     ILockable,
     ERC721BurnableUpgradeable,
-    ERC2771ContextUpgradeable
+    ERC2771ContextUpgradeable,
+    UUPSUpgradeable
 {
     mapping(address => bool) private _minters;
     mapping(uint256 => bool) private _lockedTokens;
     mapping(uint256 => uint256) private _lockTime;
+    string private _baseURL;
 
     modifier onlyMinter() {
         require(_minters[_msgSender()], "Not minter");
@@ -31,13 +34,15 @@ contract Wave is
     // {trustedForwarder} is initialized as a immutable variable of Wave, which locates at the code segment
     // so the proxy can access the {trustedForwarder} without accessing its storage
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address trustedForwarder) ERC2771ContextUpgradeable(trustedForwarder){ 
+    constructor(address trustedForwarder)
+        ERC2771ContextUpgradeable(trustedForwarder)
+    {
         _disableInitializers();
     }
 
     function initialize() public initializer {
         __ERC721_init("Wave", "WV");
-        __Ownable_init( _msgSender());
+        __Ownable_init(_msgSender());
         __Pausable_init();
         __ERC721Burnable_init();
     }
@@ -50,11 +55,21 @@ contract Wave is
         return _minters[account];
     }
 
-    function addMinter(address account) external override whenNotPaused onlyOwner {
+    function addMinter(address account)
+        external
+        override
+        whenNotPaused
+        onlyOwner
+    {
         _minters[account] = true;
     }
 
-    function removeMinter(address account) external override whenNotPaused onlyOwner{
+    function removeMinter(address account)
+        external
+        override
+        whenNotPaused
+        onlyOwner
+    {
         delete _minters[account];
     }
 
@@ -92,7 +107,11 @@ contract Wave is
         }
     }
 
-    function unlockTokens(uint256[] calldata tokenIds) external override whenNotPaused {
+    function unlockTokens(uint256[] calldata tokenIds)
+        external
+        override
+        whenNotPaused
+    {
         if (isMinter(_msgSender())) {
             for (uint256 i = 0; i < tokenIds.length; i++) {
                 _requireOwned(tokenIds[i]);
@@ -154,5 +173,15 @@ contract Wave is
         returns (uint256)
     {
         return super._contextSuffixLength();
+    }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    function _baseURI() internal view virtual override  returns (string memory) {
+        return _baseURL;
+    }
+
+    function setBaseURI(string calldata url) public {
+        _baseURL = url;
     }
 }
